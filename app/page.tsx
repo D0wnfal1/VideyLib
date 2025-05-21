@@ -5,9 +5,9 @@ import { VideoFile, FolderContent } from '@/lib/types';
 import VideoList from '@/components/VideoList';
 import VideoPlayer from '@/components/VideoPlayer';
 import TagManager from '@/components/TagManager';
-import ThemeSwitcher from '@/components/ThemeSwitcher';
-import { FaHome, FaArrowLeft, FaFolder, FaFolderPlus, FaBookmark, FaSave, FaTrash } from 'react-icons/fa';
+import { FaTrash } from 'react-icons/fa';
 import path from 'path';
+import { useNavigation } from '@/context/NavigationContext';
 
 export default function Home() {
   const [folderContent, setFolderContent] = useState<FolderContent>({
@@ -18,58 +18,45 @@ export default function Home() {
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pathHistory, setPathHistory] = useState<string[]>([]);
-  const [savedPaths, setSavedPaths] = useState<string[]>([]);
-  const [showFolderDialog, setShowFolderDialog] = useState(false);
-  const [showSavedPathsDialog, setShowSavedPathsDialog] = useState(false);
+  
+  const {
+    currentPath,
+    showFolderDialog,
+    showSavedPathsDialog,
+    loadFolder,
+    savedPaths,
+    setShowFolderDialog,
+    setShowSavedPathsDialog,
+    removeSavedPath,
+  } = useNavigation();
+
   const [newFolderPath, setNewFolderPath] = useState('');
-
+  
   useEffect(() => {
-    const savedPathsFromStorage = localStorage.getItem('savedPaths');
-    if (savedPathsFromStorage) {
-      setSavedPaths(JSON.parse(savedPathsFromStorage));
-    }
-  }, []);
-
-  const savePaths = (paths: string[]) => {
-    localStorage.setItem('savedPaths', JSON.stringify(paths));
-    setSavedPaths(paths);
-  };
-
-  const loadFolder = async (folderPath: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`/api/videos?path=${encodeURIComponent(folderPath)}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to load folder content');
+    const loadInitialData = async () => {
+      try {
+        if (currentPath) {
+          setLoading(true);
+          setError(null);
+          
+          try {
+            const data = await loadFolder(currentPath);
+            // Используем приведение типа для данных
+            setFolderContent(data as unknown as FolderContent);
+          } catch (loadError) {
+            console.error('Error in loadFolder:', loadError);
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        console.error('Error loading folder:', err);
+      } finally {
+        setLoading(false);
       }
-      
-      const data = await response.json();
-      setFolderContent(data);
-      
-      if (pathHistory.length === 0 || pathHistory[pathHistory.length - 1] !== folderPath) {
-        setPathHistory((prev) => [...prev, folderPath]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      console.error('Error loading folder:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const goBack = () => {
-    if (pathHistory.length > 1) {
-      const newHistory = [...pathHistory];
-      newHistory.pop();
-      const previousPath = newHistory[newHistory.length - 1];
-      setPathHistory(newHistory);
-      loadFolder(previousPath);
-    }
-  };
+    };
+    
+    loadInitialData();
+  }, [currentPath, loadFolder]);
 
   const navigateToFolder = (folder: string) => {
     const newPath = path.join(folderContent.currentPath, folder);
@@ -107,7 +94,7 @@ export default function Home() {
 
       setFolderContent((prev) => ({
         ...prev,
-        videos: prev.videos.map((video) =>
+        videos: prev.videos.map((video: VideoFile) =>
           video.id === videoId ? { ...video, tags } : video
         ),
       }));
@@ -189,34 +176,6 @@ export default function Home() {
       throw error;
     }
   };
-
-  const saveCurrentPath = () => {
-    if (folderContent.currentPath && !savedPaths.includes(folderContent.currentPath)) {
-      const newSavedPaths = [...savedPaths, folderContent.currentPath];
-      savePaths(newSavedPaths);
-    }
-  };
-
-  const removeSavedPath = (pathToRemove: string) => {
-    const newSavedPaths = savedPaths.filter(p => p !== pathToRemove);
-    savePaths(newSavedPaths);
-  };
-
-  useEffect(() => {
-    const savedPathsFromStorage = localStorage.getItem('savedPaths');
-    if (savedPathsFromStorage) {
-      const paths = JSON.parse(savedPathsFromStorage);
-      setSavedPaths(paths);
-      
-      if (paths.length > 0) {
-        setShowSavedPathsDialog(true);
-      } else {
-        setShowFolderDialog(true);
-      }
-    } else {
-      setShowFolderDialog(true);
-    }
-  }, []);
 
   const handleSubmitNewPath = (e: React.FormEvent) => {
     e.preventDefault();
@@ -311,68 +270,6 @@ export default function Home() {
       )}
 
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex items-center gap-4">
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={() => {
-                if (pathHistory.length > 0) {
-                  loadFolder(pathHistory[0]);
-                  setPathHistory([pathHistory[0]]);
-                }
-              }}
-              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-              title="Go to home folder"
-            >
-              <FaHome />
-            </button>
-            
-            <button
-              onClick={goBack}
-              disabled={pathHistory.length <= 1}
-              className={`p-2 rounded-full transition-colors ${
-                pathHistory.length <= 1
-                  ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
-              title="Go back"
-            >
-              <FaArrowLeft />
-            </button>
-
-            <button
-              onClick={() => setShowFolderDialog(true)}
-              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-              title="Select folder"
-            >
-              <FaFolderPlus />
-            </button>
-
-            <button
-              onClick={() => setShowSavedPathsDialog(true)}
-              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-              title="Saved paths"
-            >
-              <FaBookmark />
-            </button>
-            
-            <ThemeSwitcher />
-          </div>
-          
-          <div className="flex-1 p-2 bg-card-light dark:bg-card-dark rounded-lg border border-app-light dark:border-app-dark flex items-center transition-colors">
-            <FaFolder className="text-yellow-500 dark:text-yellow-400 mr-2" />
-            <span className="truncate text-app-light dark:text-app-dark">{folderContent.currentPath}</span>
-            {folderContent.currentPath && (
-              <button
-                onClick={saveCurrentPath}
-                className="ml-2 text-blue-500 hover:text-blue-700"
-                title="Save this path"
-              >
-                <FaSave size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-
         {error && (
           <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg">
             Error: {error}. Please try again or check if the folder exists.

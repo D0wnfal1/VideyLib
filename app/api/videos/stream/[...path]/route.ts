@@ -25,18 +25,17 @@ function getMimeType(filePath: string): string {
   return mimeTypes[ext] || "application/octet-stream";
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const pathArray = await params.path;
-    if (!pathArray || !pathArray.length) {
+    // Получаем путь из URL запроса вместо params
+    const url = new URL(request.url);
+    const pathSegments = url.pathname.split("/api/videos/stream/")[1];
+
+    if (!pathSegments) {
       return NextResponse.json({ error: "Invalid file path" }, { status: 400 });
     }
 
-    const filePath = pathArray.join("/");
-    const decodedPath = decodeURIComponent(filePath);
+    const decodedPath = decodeURIComponent(pathSegments);
 
     let stats;
     try {

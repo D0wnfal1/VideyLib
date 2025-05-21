@@ -42,6 +42,12 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
     setLoadingMoments(true);
   }, [video.id]);
   
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+  
   const videoUrl = useMemo(() => {
     try {
       return getVideoUrl(video.path);
@@ -141,7 +147,14 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
   };
   
   const toggleExpandedView = () => {
-    setIsExpanded(!isExpanded);
+    const newExpanded = !isExpanded;
+    setIsExpanded(newExpanded);
+    
+    if (newExpanded) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
   };
   
   const goToPreviousVideo = (e: React.MouseEvent) => {
@@ -229,7 +242,7 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
 
   return (
     <div className={`${isExpanded ? 'fixed inset-0 z-50 bg-black p-4 overflow-y-auto' : 'w-full'} h-auto bg-gray-900 dark:bg-black rounded-lg overflow-hidden shadow-lg transition-colors`}>
-      <div className="relative">
+      <div className={`relative ${isExpanded ? 'h-full max-h-full' : ''}`}>
         <div className="absolute top-2 right-2 z-50 flex gap-2">
           <button
             onClick={(e) => {
@@ -259,20 +272,22 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
         </div>
         
         <div className={isExpanded ? "max-w-5xl mx-auto" : ""}>
-          <div className="absolute top-1/2 left-0 right-0 z-40 flex justify-between transform -translate-y-1/2 px-4">
+          <div className="absolute top-1/2 left-2 right-2 z-40 flex justify-between transform -translate-y-1/2 pointer-events-none">
             <button 
               onClick={goToPreviousVideo}
-              className={`bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors ${currentIndex <= 0 ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
+              className={`bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors ${currentIndex <= 0 ? 'opacity-50 cursor-not-allowed' : 'opacity-100'} pointer-events-auto`}
               disabled={currentIndex <= 0}
               title="Previous video"
+              style={{ marginTop: '-70px' }}
             >
               <FaStepBackward />
             </button>
             <button 
               onClick={goToNextVideo}
-              className={`bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors ${currentIndex >= allVideos.length - 1 ? 'opacity-50 cursor-not-allowed' : 'opacity-100'}`}
+              className={`bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors ${currentIndex >= allVideos.length - 1 ? 'opacity-50 cursor-not-allowed' : 'opacity-100'} pointer-events-auto`}
               disabled={currentIndex >= allVideos.length - 1}
               title="Next video"
+              style={{ marginTop: '-70px' }}
             >
               <FaStepForward />
             </button>
@@ -325,6 +340,31 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
           {loadingThumbnail && !error && (
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 z-20">
               <FaSpinner className="text-white animate-spin" size={48} />
+            </div>
+          )}
+          
+          {!error && !loadingMoments && (
+            <div className="mb-2 relative overflow-hidden">
+              <h3 className="text-sm text-gray-300 mb-2 px-2">Video Moments</h3>
+              <div className="flex justify-center gap-1">
+                {videoMomentThumbnails.map((thumbUrl, index) => (
+                  <div 
+                    key={index}
+                    className="flex-1 cursor-pointer relative group max-w-[130px]"
+                    onClick={() => seekToPosition([0.1, 0.3, 0.5, 0.7, 0.9][index])}
+                  >
+                    <img 
+                      src={thumbUrl} 
+                      alt={`Moment ${index + 1}`} 
+                      className="w-full h-16 object-cover rounded border border-gray-700 group-hover:border-primary-500 transition-all"
+                    />
+                    <span className="absolute bottom-1 right-1 text-white text-xs bg-black bg-opacity-70 px-1 rounded">
+                      {Math.floor(([0.1, 0.3, 0.5, 0.7, 0.9][index]) * 100)}%
+                    </span>
+                    <div className="absolute inset-0 bg-primary-500 opacity-0 group-hover:opacity-20 transition-opacity rounded"></div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           
@@ -381,35 +421,6 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
                   {tag}
                 </span>
               ))}
-            </div>
-            
-            <div className="mt-4">
-              <h3 className="text-sm text-gray-300 mb-2">Video Moments</h3>
-              <div className="flex overflow-x-auto gap-2 pb-2">
-                {loadingMoments ? (
-                  <div className="flex items-center justify-center w-full h-16 bg-gray-800 rounded">
-                    <FaSpinner className="text-white animate-spin" size={24} />
-                  </div>
-                ) : (
-                  videoMomentThumbnails.map((thumbUrl, index) => (
-                    <div 
-                      key={index}
-                      className="flex-none cursor-pointer relative group"
-                      onClick={() => seekToPosition([0.1, 0.3, 0.5, 0.7, 0.9][index])}
-                    >
-                      <img 
-                        src={thumbUrl} 
-                        alt={`Moment ${index + 1}`} 
-                        className="h-16 object-cover rounded border border-gray-700 group-hover:border-primary-500"
-                      />
-                      <span className="absolute bottom-1 right-1 text-white text-xs bg-black bg-opacity-70 px-1 rounded">
-                        {Math.floor(([0.1, 0.3, 0.5, 0.7, 0.9][index]) * 100)}%
-                      </span>
-                      <div className="absolute inset-0 bg-primary-500 opacity-0 group-hover:opacity-20 transition-opacity rounded"></div>
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
           </div>
           
