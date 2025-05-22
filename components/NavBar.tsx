@@ -22,7 +22,11 @@ export default function NavBar() {
           <div className="flex items-center space-x-2">
             <div className="flex gap-2 items-center">
               <button
-                onClick={goHome}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  goHome();
+                }}
                 className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
                 title="Go to home folder"
               >
@@ -30,7 +34,13 @@ export default function NavBar() {
               </button>
               
               <button
-                onClick={goBack}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (pathHistory.length > 1) {
+                    goBack();
+                  }
+                }}
                 disabled={pathHistory.length <= 1}
                 className={`p-2 rounded-full transition-colors ${
                   pathHistory.length <= 1
@@ -43,7 +53,11 @@ export default function NavBar() {
               </button>
 
               <button
-                onClick={() => setShowFolderDialog(true)}
+                onClick={(e) => {
+                  e.preventDefault(); 
+                  e.stopPropagation();
+                  setShowFolderDialog(true);
+                }}
                 className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
                 title="Select folder"
               >
@@ -51,7 +65,11 @@ export default function NavBar() {
               </button>
 
               <button
-                onClick={() => setShowSavedPathsDialog(true)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowSavedPathsDialog(true);
+                }}
                 className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
                 title="Saved paths"
               >

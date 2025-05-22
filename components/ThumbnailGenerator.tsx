@@ -38,29 +38,39 @@ const ThumbnailGenerator = memo(({
     }
   };
 
+  const getThumbnailUrl = (path: string) => {
+    try {
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
+      }
+      const normalizedPath = path.replace(/\\/g, '/');
+      const encodedPath = encodeURIComponent(normalizedPath);
+      return `/api/videos/thumbnail/${encodedPath}`;
+    } catch (e) {
+      console.error('Error formatting thumbnail path:', e);
+      return null;
+    }
+  };
+
   const generateFallbackThumbnail = () => {
-    // Create a canvas-based thumbnail with video info
     const canvas = document.createElement('canvas');
     canvas.width = 640;
     canvas.height = 360;
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
-      // Draw a gradient background
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
       gradient.addColorStop(0, '#1e293b');
       gradient.addColorStop(1, '#0f172a');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Draw title
       ctx.fillStyle = '#f8fafc';
       ctx.font = 'bold 24px Arial';
       ctx.textAlign = 'center';
       const title = video.title.length > 28 ? video.title.substring(0, 25) + '...' : video.title;
       ctx.fillText(title, canvas.width / 2, canvas.height / 2);
       
-      // Draw file extension
       const ext = video.path.split('.').pop() || 'unknown';
       ctx.font = '18px Arial';
       ctx.fillStyle = '#94a3b8';
@@ -72,9 +82,23 @@ const ThumbnailGenerator = memo(({
     }
   };
 
+  const tryGetPosterThumbnail = () => {
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    if (videoElement.poster) {
+      onThumbnailGenerated(videoElement.poster);
+      setLoaded(true);
+      return true;
+    }
+    return false;
+  };
+
   const tryGenerateThumbnail = () => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
+    
+    if (tryGetPosterThumbnail()) return;
     
     try {
       if (videoElement.videoWidth <= 0 || videoElement.videoHeight <= 0) {
@@ -106,10 +130,38 @@ const ThumbnailGenerator = memo(({
   };
 
   useEffect(() => {
+    const directThumbUrl = getThumbnailUrl(video.path);
+    if (directThumbUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        onThumbnailGenerated(directThumbUrl);
+        setLoaded(true);
+      };
+      img.onerror = () => {
+        console.log("Direct thumbnail failed, falling back to video element");
+      };
+      img.src = directThumbUrl;
+    }
+  }, [video.path]);
+
+  useEffect(() => {
+    if (loaded) return; 
     const videoElement = videoRef.current;
     if (!videoElement) return;
 
-    const handleCanPlay = () => {
+    if (tryGetPosterThumbnail()) return;
+
+    if (videoElement.readyState >= 1) {
+      try {
+        videoElement.currentTime = videoElement.duration > 0 ? 
+          videoElement.duration * position : 0.1;
+      } catch (e) {
+        console.warn('Could not set time directly, waiting for metadata', e);
+      }
+    }
+
+    const handleLoadedMetadata = () => {
       try {
         videoElement.currentTime = videoElement.duration * position;
       } catch (e) {
@@ -136,20 +188,19 @@ const ThumbnailGenerator = memo(({
       generateFallbackThumbnail();
     };
 
-    videoElement.addEventListener('canplay', handleCanPlay);
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
     videoElement.addEventListener('timeupdate', handleTimeUpdate);
     videoElement.addEventListener('error', handleLoadError);
     videoElement.addEventListener('abort', handleAbort);
 
     return () => {
-      videoElement.removeEventListener('canplay', handleCanPlay);
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
       videoElement.removeEventListener('timeupdate', handleTimeUpdate);
       videoElement.removeEventListener('error', handleLoadError);
       videoElement.removeEventListener('abort', handleAbort);
     };
   }, [loaded, onThumbnailGenerated, position, quality, video.title]);
 
-  // Add a timeout for loading
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (!loaded && !error) {
@@ -157,7 +208,7 @@ const ThumbnailGenerator = memo(({
         setError(true);
         generateFallbackThumbnail();
       }
-    }, 10000); // 10 second timeout
+    }, 10000); 
     
     return () => clearTimeout(timeoutId);
   }, [loaded, error, video.title]);
@@ -165,7 +216,7 @@ const ThumbnailGenerator = memo(({
   return (
     <video
       ref={videoRef}
-      src={!error ? getVideoUrl(video.path) : undefined}
+      src={!error && !loaded ? getVideoUrl(video.path) : undefined}
       crossOrigin="anonymous"
       muted
       preload="metadata"

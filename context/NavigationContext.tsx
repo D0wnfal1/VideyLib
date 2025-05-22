@@ -50,7 +50,9 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 
   const loadFolder = async (folderPath: string): Promise<FolderContent> => {
     try {
-      const response = await fetch(`/api/videos?path=${encodeURIComponent(folderPath)}`);
+      const normalizedPath = folderPath.replace(/\\/g, '/');
+      
+      const response = await fetch(`/api/videos?path=${encodeURIComponent(normalizedPath)}`);
       
       if (!response.ok) {
         throw new Error('Failed to load folder content');
@@ -59,8 +61,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       const data = await response.json() as FolderContent;
       setFolderPath(data.currentPath);
       
-      if (pathHistory.length === 0 || pathHistory[pathHistory.length - 1] !== folderPath) {
-        setPathHistory((prev) => [...prev, folderPath]);
+      if (pathHistory.length === 0 || pathHistory[pathHistory.length - 1] !== data.currentPath) {
+        setPathHistory((prev) => [...prev, data.currentPath]);
       }
       
       return data;
@@ -76,14 +78,37 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       newHistory.pop();
       const previousPath = newHistory[newHistory.length - 1];
       setPathHistory(newHistory);
-      loadFolder(previousPath);
+      
+      setFolderPath(previousPath);
+      
+      loadFolder(previousPath).catch(error => {
+        console.error('Failed to navigate back:', error);
+      });
     }
   };
 
   const goHome = () => {
     if (pathHistory.length > 0) {
-      loadFolder(pathHistory[0]);
-      setPathHistory([pathHistory[0]]);
+      const homePath = pathHistory[0];
+      
+      setPathHistory([homePath]);
+      
+      setFolderPath(homePath);
+      
+      loadFolder(homePath).catch(error => {
+        console.error('Failed to navigate to home:', error);
+      });
+    } else if (savedPaths.length > 0) {
+      const homePath = savedPaths[0];
+      setPathHistory([homePath]);
+      
+      setFolderPath(homePath);
+      
+      loadFolder(homePath).catch(error => {
+        console.error('Failed to navigate to saved home:', error);
+      });
+    } else {
+      setShowFolderDialog(true);
     }
   };
 

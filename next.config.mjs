@@ -1,22 +1,18 @@
 /** @type {import('next').NextConfig} */
 export default {
-  
   reactStrictMode: true,
 
-  
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",
     },
   },
 
-  
   serverExternalPackages: ["path-browserify"],
 
-  
   images: {
     domains: ["localhost"],
-    unoptimized: true, 
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "http",
@@ -28,9 +24,7 @@ export default {
     dangerouslyAllowSVG: true,
   },
 
-  
   webpack: (config, { isServer }) => {
-    
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -39,7 +33,6 @@ export default {
       };
     }
 
-    
     config.module.rules.push({
       test: /\.(mp4|webm|ogg|mp3|wav|flac|aac|mov|avi)(\?.*)?$/,
       use: {

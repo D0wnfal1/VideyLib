@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import ReactPlayer from 'react-player';
 import { VideoFile } from '@/lib/types';
-import { FaTimes, FaSpinner, FaExpand, FaCompress, FaStepBackward, FaStepForward, FaPlay, FaEye, FaCheck } from 'react-icons/fa';
+import { FaTimes, FaSpinner, FaExpand, FaCompress, FaStepBackward, FaStepForward, FaPlay, FaEye, FaCheck, FaTag } from 'react-icons/fa';
 import ThumbnailGenerator from './ThumbnailGenerator';
 import { useWatchedVideos } from '@/lib/hooks/useWatchedVideos';
 import { getVideoUrl } from '@/lib/utils/videoUtils';
@@ -26,6 +26,7 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
   const [visibleVideosList, setVisibleVideosList] = useState(4); 
   const [otherVideosThumbnails, setOtherVideosThumbnails] = useState<Record<string, string>>({});
   const [loadingOtherThumbnails, setLoadingOtherThumbnails] = useState<Record<string, boolean>>({});
+  const [showSimilarVideos, setShowSimilarVideos] = useState(false);
   
   const { isWatched, toggleWatched } = useWatchedVideos();
   const watched = isWatched(video.id);
@@ -191,10 +192,34 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
     setVisibleVideosList(prev => Math.min(prev + 4, allVideos.length));
   };
   
-  const otherVideos = useMemo(() => 
-    allVideos.filter(v => v.id !== video.id).slice(0, visibleVideosList),
-    [allVideos, video.id, visibleVideosList]
-  );
+  const getSimilarVideos = useMemo(() => {
+    if (!video.tags || video.tags.length === 0) return [];
+    
+    // Find videos that share at least one tag with the current video
+    return allVideos
+      .filter(v => {
+        if (v.id === video.id) return false; // Exclude current video
+        if (!v.tags || v.tags.length === 0) return false;
+        
+        // Check if this video shares any tag with the current video
+        return v.tags.some(tag => video.tags.includes(tag));
+      })
+      .sort((a, b) => {
+        // Sort by number of matching tags (most matches first)
+        const aMatches = a.tags.filter(tag => video.tags.includes(tag)).length;
+        const bMatches = b.tags.filter(tag => video.tags.includes(tag)).length;
+        return bMatches - aMatches;
+      })
+      .slice(0, visibleVideosList);
+  }, [allVideos, video.id, video.tags, visibleVideosList]);
+  
+  const otherVideos = useMemo(() => {
+    if (showSimilarVideos && getSimilarVideos.length > 0) {
+      return getSimilarVideos;
+    } else {
+      return allVideos.filter(v => v.id !== video.id).slice(0, visibleVideosList);
+    }
+  }, [allVideos, video.id, visibleVideosList, showSimilarVideos, getSimilarVideos]);
   
   useEffect(() => {
     if (isExpanded) {
@@ -426,7 +451,33 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
           
           {isExpanded && (
             <div className="mt-6">
-              <h3 className="text-lg font-bold text-white mb-4">Other Videos</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-white">Other Videos</h3>
+                
+                {video.tags && video.tags.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-300">Show videos with similar tags</span>
+                    <button
+                      onClick={() => setShowSimilarVideos(!showSimilarVideos)}
+                      className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 transition-colors ${
+                        showSimilarVideos
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-gray-700 text-gray-300'
+                      }`}
+                    >
+                      <FaTag size={12} /> 
+                      {showSimilarVideos ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {showSimilarVideos && getSimilarVideos.length === 0 && (
+                <div className="text-center text-gray-400 py-4">
+                  No videos with similar tags found
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {otherVideos.map((otherVideo) => {
                   const otherVideoWatched = isWatched(otherVideo.id);
@@ -460,6 +511,12 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
                           </div>
                         )}
                         
+                        {showSimilarVideos && otherVideo.tags && video.tags && (
+                          <div className="absolute top-2 left-2 bg-primary-600 text-white px-1.5 py-0.5 rounded text-xs">
+                            {otherVideo.tags.filter(tag => video.tags.includes(tag)).length} matching tags
+                          </div>
+                        )}
+                        
                         {loadingOtherThumbnails[otherVideo.id] && (
                           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-5">
                             <FaSpinner className="text-white animate-spin" size={24} />
@@ -474,6 +531,22 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
                       </div>
                       <div className="p-2">
                         <h4 className="text-sm font-medium text-white truncate">{otherVideo.title}</h4>
+                        
+                        {showSimilarVideos && otherVideo.tags && otherVideo.tags.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {otherVideo.tags
+                              .filter(tag => video.tags.includes(tag))
+                              .slice(0, 2)
+                              .map((tag, i) => (
+                                <span key={i} className="text-xs bg-primary-700/50 text-primary-300 px-1 py-0.5 rounded">
+                                  {tag}
+                                </span>
+                              ))}
+                            {otherVideo.tags.filter(tag => video.tags.includes(tag)).length > 2 && (
+                              <span className="text-xs text-gray-400">+{otherVideo.tags.filter(tag => video.tags.includes(tag)).length - 2} more</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
