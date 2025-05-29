@@ -18,11 +18,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Генерируем имя файла, если не указано
     const finalFilename =
       filename || `downloaded-${uuidv4()}${getFileExtension(url)}`;
 
-    // Создаем директории, если они не существуют
     try {
       await mkdir(destPath, { recursive: true });
     } catch (error) {
@@ -38,7 +36,6 @@ export async function POST(request: NextRequest) {
 
     const filePath = path.join(destPath, finalFilename);
 
-    // Запрашиваем файл
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -51,16 +48,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Создаем поток записи
     const fileStream = createWriteStream(filePath);
 
     if (response.body) {
-      // Скачиваем файл
-      // Преобразуем в Buffer
       const buffer = await response.arrayBuffer();
       const nodeBuffer = Buffer.from(buffer);
 
-      // Записываем в файл
       fileStream.write(nodeBuffer);
       fileStream.end();
     } else {
@@ -94,20 +87,16 @@ export async function POST(request: NextRequest) {
 
 function getFileExtension(url: string): string {
   try {
-    // Пробуем получить расширение из URL
     const urlObj = new URL(url);
     const pathname = urlObj.pathname;
     const ext = path.extname(pathname);
 
-    // Если расширение найдено и это видео-формат, используем его
     if (ext && /\.(mp4|webm|mkv|avi|mov|wmv|flv|mpeg|m4v)$/i.test(ext)) {
       return ext;
     }
 
-    // Если не нашли или не видео-формат, по умолчанию .mp4
     return ".mp4";
   } catch {
-    // По умолчанию, если не удалось разобрать URL
     return ".mp4";
   }
 }

@@ -27,7 +27,6 @@ function getMimeType(filePath: string): string {
 
 export async function GET(request: NextRequest) {
   try {
-    // Получаем путь из URL запроса вместо params
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/api/videos/stream/")[1];
 
@@ -91,7 +90,8 @@ export async function GET(request: NextRequest) {
         "Accept-Ranges": "bytes",
         "Content-Length": chunkSize.toString(),
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ETag: `"${stats.size}-${stats.mtimeMs}"`,
       };
 
       return new NextResponse(fileStream as unknown as ReadableStream, {
@@ -104,7 +104,8 @@ export async function GET(request: NextRequest) {
       const headers = {
         "Content-Length": stats.size.toString(),
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ETag: `"${stats.size}-${stats.mtimeMs}"`,
       };
 
       return new NextResponse(fileStream as unknown as ReadableStream, {

@@ -18,13 +18,12 @@ import {
   FaCalendarAlt,
   FaFileAlt,
   FaSort,
-  FaSpinner,
   FaEye,
   FaCheck
 } from 'react-icons/fa';
 import VideoPreview from './VideoPreview';
-import ThumbnailGenerator from './ThumbnailGenerator';
 import { useWatchedVideos } from '@/lib/hooks/useWatchedVideos';
+import ReactDOM from 'react-dom';
 
 
 type SortOption = 'name' | 'date' | 'size';
@@ -63,8 +62,6 @@ export default function VideoList({
   const [renameError, setRenameError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [menuOpenForVideo, setMenuOpenForVideo] = useState<string | null>(null);
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
-  const [loadingThumbnails, setLoadingThumbnails] = useState<Record<string, boolean>>({});
   const [watchedFilter, setWatchedFilter] = useState<WatchedFilter>('all');
   
   
@@ -246,9 +243,21 @@ export default function VideoList({
   };
   
   
+  const [menuPosition, setMenuPosition] = useState<{top: number, left: number} | null>(null);
+
   const toggleVideoMenu = (videoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setMenuOpenForVideo(prev => prev === videoId ? null : videoId);
+    if (menuOpenForVideo === videoId) {
+      setMenuOpenForVideo(null);
+      setMenuPosition(null);
+    } else {
+      setMenuOpenForVideo(videoId);
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+      });
+    }
   };
   
   
@@ -335,41 +344,6 @@ export default function VideoList({
       </svg>
     `;
   };
-
-  
-  const handleThumbnailGenerated = (videoId: string, thumbnailUrl: string) => {
-    setThumbnails(prev => ({
-      ...prev,
-      [videoId]: thumbnailUrl
-    }));
-    setLoadingThumbnails(prev => ({
-      ...prev,
-      [videoId]: false
-    }));
-  };
-
-  
-  useEffect(() => {
-    
-    const newLoadingState: Record<string, boolean> = {};
-    let needsUpdate = false;
-    
-    currentVideos.forEach(video => {
-      
-      if (!thumbnails[video.id] && !loadingThumbnails[video.id]) {
-        newLoadingState[video.id] = true;
-        needsUpdate = true;
-      }
-    });
-    
-    
-    if (needsUpdate) {
-      setLoadingThumbnails(prev => ({
-        ...prev,
-        ...newLoadingState
-      }));
-    }
-  }, [currentVideos]); 
 
   return (
     <div className="w-full">
@@ -685,54 +659,24 @@ export default function VideoList({
               onMouseLeave={handleMouseLeave}
             >
               <div className="relative aspect-video bg-gray-800 dark:bg-black video-thumbnail">
-                {}
-                {!thumbnails[video.id] && (
-                  <ThumbnailGenerator 
-                    video={video} 
-                    onThumbnailGenerated={(url) => handleThumbnailGenerated(video.id, url)} 
-                    position={0.25} 
-                    quality={0.7}
-                  />
-                )}
-
-                {}
+                <img
+                  src={`/api/videos/thumbnail/${encodeURIComponent(video.path)}`}
+                  alt={video.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(generatePreviewImage(video))}`;
+                  }}
+                />
                 {videoWatched && (
                   <div className="absolute top-2 right-2 z-20 bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center">
                     <FaCheck size={12} />
                   </div>
                 )}
-
                 <div className="absolute inset-0 flex items-center justify-center">
-                  {}
-                  <div className="absolute inset-0">
-                    {thumbnails[video.id] ? (
-                      <img 
-                        src={thumbnails[video.id]} 
-                        alt={video.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <img 
-                        src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(generatePreviewImage(video))}`}
-                        alt={video.title}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-                  
-                  {}
-                  {loadingThumbnails[video.id] && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-5">
-                      <FaSpinner className="text-white animate-spin" size={36} />
-                    </div>
-                  )}
-                  
-                  {}
                   <div className="bg-blue-500/70 rounded-full p-3 z-10">
                     <FaPlay className="text-white" size={24} />
                   </div>
                 </div>
-                
                 {video.path && hoveredVideoId === video.id && (
                   <VideoPreview 
                     video={video} 
@@ -765,8 +709,10 @@ export default function VideoList({
                     </button>
                     
                     {}
-                    {menuOpenForVideo === video.id && (
-                      <div className="hidden md:block absolute top-0 right-0 transform -translate-y-full -translate-x-1/2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 py-1 border border-gray-200 dark:border-gray-700 mt-1">
+                    {menuOpenForVideo === video.id && menuPosition && ReactDOM.createPortal(
+                      <div className="z-50 fixed bg-white dark:bg-gray-800 bg-opacity-95 rounded-md drop-shadow-xl border border-gray-200 dark:border-gray-700 py-1 pointer-events-auto w-48"
+                        style={{ top: menuPosition.top, left: menuPosition.left, minWidth: '10rem' }}
+                      >
                         <button
                           className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
                           onClick={(e) => openRenameDialog(video, e)}
@@ -779,7 +725,8 @@ export default function VideoList({
                         >
                           <FaTrashAlt className="mr-2" size={12} /> Delete
                         </button>
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </div>
                 </div>

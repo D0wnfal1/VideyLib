@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Video from "@/lib/models/Video";
 import { getFolderContents } from "@/lib/services/fileService";
+import NodeCache from "node-cache";
 
+const videoCache = new NodeCache({ stdTTL: 3600 });
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,17 +18,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const cacheKey = `videos_${folderPath}`;
+    const cachedData = videoCache.get(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
+    }
+
     await dbConnect();
 
-    
     const folderContent = await getFolderContents(folderPath);
 
-    
     const savedVideos = await Video.find({
       path: { $in: folderContent.videos.map((v) => v.path) },
     });
 
-    
     const updatedVideos = folderContent.videos.map((video) => {
       const savedVideo = savedVideos.find((sv) => sv.path === video.path);
 
@@ -42,11 +47,15 @@ export async function GET(request: NextRequest) {
       return video;
     });
 
-    return NextResponse.json({
+    const response = {
       videos: updatedVideos,
       folders: folderContent.folders,
       currentPath: folderContent.currentPath,
-    });
+    };
+
+    videoCache.set(cacheKey, response);
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Error fetching videos:", error);
     return NextResponse.json(

@@ -21,12 +21,9 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [loadingThumbnail, setLoadingThumbnail] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [videoMomentThumbnails, setVideoMomentThumbnails] = useState<string[]>([]);
-  const [loadingMoments, setLoadingMoments] = useState(true);
   const [visibleVideosList, setVisibleVideosList] = useState(4); 
-  const [otherVideosThumbnails, setOtherVideosThumbnails] = useState<Record<string, string>>({});
-  const [loadingOtherThumbnails, setLoadingOtherThumbnails] = useState<Record<string, boolean>>({});
   const [showSimilarVideos, setShowSimilarVideos] = useState(false);
+  const [realDuration, setRealDuration] = useState<number | null>(null);
   
   const { isWatched, toggleWatched } = useWatchedVideos();
   const watched = isWatched(video.id);
@@ -38,9 +35,7 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
   
   useEffect(() => {
     setThumbnail(null);
-    setVideoMomentThumbnails([]);
     setLoadingThumbnail(true);
-    setLoadingMoments(true);
   }, [video.id]);
   
   useEffect(() => {
@@ -59,92 +54,60 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
     }
   }, [video.path]);
   
-  const generatePreviewImage = (): string => {
-    const fileName = video.title;
-    const extension = video.path.split('.').pop() || '';
-
-    const getColorForExtension = (ext: string): string => {
-      const colors: Record<string, string> = {
-        'mp4': '#3b82f6', 
-        'webm': '#10b981', 
-        'mov': '#8b5cf6', 
-        'avi': '#ef4444', 
-        'mkv': '#f59e0b', 
-        'flv': '#6366f1', 
-        'wmv': '#ec4899', 
-        'm4v': '#06b6d4', 
-        '3gp': '#a855f7', 
-        'mpg': '#14b8a6', 
-        'mpeg': '#14b8a6', 
+  useEffect(() => {
+    if (currentIndex < allVideos.length - 1) {
+      const nextVideo = allVideos[currentIndex + 1];
+      const nextVideoUrl = getVideoUrl(nextVideo.path);
+      const preloadLink = document.createElement('link');
+      preloadLink.rel = 'preload';
+      preloadLink.as = 'video';
+      preloadLink.href = nextVideoUrl;
+      document.head.appendChild(preloadLink);
+      
+      return () => {
+        document.head.removeChild(preloadLink);
       };
-      return colors[ext.toLowerCase()] || '#1e293b'; 
-    };
+    }
+  }, [currentIndex, allVideos]);
 
-    const displayName = fileName.length > 20 ? fileName.substring(0, 17) + '...' : fileName;
-    const bgColor = getColorForExtension(extension);
-    
-    const textColor = ['#10b981', '#f59e0b', '#06b6d4', '#14b8a6'].includes(bgColor) ? '#000000' : '#ffffff';
-    
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-        <defs>
-          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="${bgColor}" stop-opacity="1" />
-            <stop offset="100%" stop-color="${bgColor}" stop-opacity="0.8" />
-          </linearGradient>
-        </defs>
-        <rect width="640" height="360" fill="url(#grad)" />
-        <circle cx="320" cy="150" r="64" fill="#ffffff33" />
-        <polygon points="290,120 370,150 290,180" fill="white" />
-        <text x="320" y="260" font-family="Arial" font-size="24" fill="${textColor}" text-anchor="middle" font-weight="bold">
-          ${displayName}
-        </text>
-        <text x="320" y="290" font-family="Arial" font-size="18" fill="${textColor}99" text-anchor="middle">
-          ${extension.toUpperCase()} video file
-        </text>
-      </svg>
-    `;
-  };
+  useEffect(() => {
+    if (playerRef.current) {
+      const player = playerRef.current;
+      const handleProgress = () => {
+        const buffered = player.getInternalPlayer()?.buffered;
+        if (buffered && buffered.length > 0) {
+          const bufferedEnd = buffered.end(buffered.length - 1);
+          const duration = player.getDuration();
+          if (duration && bufferedEnd / duration > 0.8) {
+            if (currentIndex < allVideos.length - 1) {
+              const nextVideo = allVideos[currentIndex + 1];
+              const nextVideoUrl = getVideoUrl(nextVideo.path);
+              const preloadLink = document.createElement('link');
+              preloadLink.rel = 'preload';
+              preloadLink.as = 'video';
+              preloadLink.href = nextVideoUrl;
+              document.head.appendChild(preloadLink);
+            }
+          }
+        }
+      };
+
+      player.getInternalPlayer()?.addEventListener('progress', handleProgress);
+      return () => {
+        player.getInternalPlayer()?.removeEventListener('progress', handleProgress);
+      };
+    }
+  }, [currentIndex, allVideos]);
   
   const handleThumbnailGenerated = (thumbnailUrl: string) => {
     setThumbnail(thumbnailUrl);
     setLoadingThumbnail(false);
   };
   
-  const handleMomentThumbnailGenerated = (index: number, thumbnailUrl: string) => {
-    setVideoMomentThumbnails(prev => {
-      const newThumbnails = [...prev];
-      newThumbnails[index] = thumbnailUrl;
-      
-      const allLoaded = newThumbnails.filter(Boolean).length === 5;
-      if (allLoaded) {
-        setLoadingMoments(false);
-      }
-      
-      return newThumbnails;
-    });
-  };
-  
-  const handleOtherVideoThumbnailGenerated = (videoId: string, thumbnailUrl: string) => {
-    setOtherVideosThumbnails(prev => ({
-      ...prev,
-      [videoId]: thumbnailUrl
-    }));
-    setLoadingOtherThumbnails(prev => ({
-      ...prev,
-      [videoId]: false
-    }));
-  };
-  
-  const posterUrl = thumbnail 
-    ? thumbnail 
-    : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(generatePreviewImage())}`;
-
   const handleVideoError = (e: Error | string) => {
     console.error('Error playing video:', e);
     setError('Could not play video. Make sure the file exists and is in a supported format.');
     setLoadingThumbnail(false);
-    setLoadingMoments(false);
   };
   
   const toggleExpandedView = () => {
@@ -195,17 +158,14 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
   const getSimilarVideos = useMemo(() => {
     if (!video.tags || video.tags.length === 0) return [];
     
-    // Find videos that share at least one tag with the current video
     return allVideos
       .filter(v => {
-        if (v.id === video.id) return false; // Exclude current video
+        if (v.id === video.id) return false; 
         if (!v.tags || v.tags.length === 0) return false;
         
-        // Check if this video shares any tag with the current video
         return v.tags.some(tag => video.tags.includes(tag));
       })
       .sort((a, b) => {
-        // Sort by number of matching tags (most matches first)
         const aMatches = a.tags.filter(tag => video.tags.includes(tag)).length;
         const bMatches = b.tags.filter(tag => video.tags.includes(tag)).length;
         return bMatches - aMatches;
@@ -222,48 +182,30 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
   }, [allVideos, video.id, visibleVideosList, showSimilarVideos, getSimilarVideos]);
   
   useEffect(() => {
-    if (isExpanded) {
-      const newLoadingState: Record<string, boolean> = {};
-      let needsUpdate = false;
-      
-      otherVideos.forEach(video => {
-        if (!otherVideosThumbnails[video.id] && !loadingOtherThumbnails[video.id]) {
-          newLoadingState[video.id] = true;
-          needsUpdate = true;
-        }
-      });
-      
-      if (needsUpdate) {
-        setLoadingOtherThumbnails(prev => ({
-          ...prev,
-          ...newLoadingState
-        }));
-      }
-    }
-  }, [isExpanded, otherVideosThumbnails, loadingOtherThumbnails, otherVideos]);
-  
+    setRealDuration(null); 
+  }, [video.path]);
+
   useEffect(() => {
-    if (!isExpanded) return;
-    
-    const newLoadingState: Record<string, boolean> = {};
-    let needsUpdate = false;
-    
-    allVideos.filter(v => v.id !== video.id)
-      .slice(Math.max(0, visibleVideosList - 4), visibleVideosList)
-      .forEach(video => {
-        if (!otherVideosThumbnails[video.id] && !loadingOtherThumbnails[video.id]) {
-          newLoadingState[video.id] = true;
-          needsUpdate = true;
-        }
-      });
-    
-    if (needsUpdate) {
-      setLoadingOtherThumbnails(prev => ({
-        ...prev,
-        ...newLoadingState
-      }));
-    }
-  }, [visibleVideosList, isExpanded, allVideos, video.id, otherVideosThumbnails, loadingOtherThumbnails]);
+    if (realDuration !== null) return;
+    const vid = document.createElement('video');
+    vid.src = getVideoUrl(video.path);
+    vid.preload = 'metadata';
+    vid.autoplay = false;
+    vid.muted = true;
+    vid.onloadedmetadata = () => {
+      setRealDuration(vid.duration);
+      vid.src = '';
+    };
+    vid.onerror = () => {
+      setRealDuration(60); 
+      vid.src = '';
+    };
+    return () => {
+      vid.onloadedmetadata = null;
+      vid.onerror = null;
+      vid.src = '';
+    };
+  }, [video.path, realDuration]);
 
   return (
     <div className={`${isExpanded ? 'fixed inset-0 z-50 bg-black p-4 overflow-y-auto' : 'w-full'} h-auto bg-gray-900 dark:bg-black rounded-lg overflow-hidden shadow-lg transition-colors`}>
@@ -327,68 +269,46 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
             />
           )}
           
-          {loadingMoments && (
-            <>
-              <ThumbnailGenerator 
-                video={video} 
-                onThumbnailGenerated={(url) => handleMomentThumbnailGenerated(0, url)}
-                position={0.1}
-                quality={0.6}
-              />
-              <ThumbnailGenerator 
-                video={video} 
-                onThumbnailGenerated={(url) => handleMomentThumbnailGenerated(1, url)}
-                position={0.3}
-                quality={0.6}
-              />
-              <ThumbnailGenerator 
-                video={video} 
-                onThumbnailGenerated={(url) => handleMomentThumbnailGenerated(2, url)}
-                position={0.5}
-                quality={0.6}
-              />
-              <ThumbnailGenerator 
-                video={video} 
-                onThumbnailGenerated={(url) => handleMomentThumbnailGenerated(3, url)}
-                position={0.7}
-                quality={0.6}
-              />
-              <ThumbnailGenerator 
-                video={video} 
-                onThumbnailGenerated={(url) => handleMomentThumbnailGenerated(4, url)}
-                position={0.9}
-                quality={0.6}
-              />
-            </>
-          )}
-          
           {loadingThumbnail && !error && (
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60 z-20">
               <FaSpinner className="text-white animate-spin" size={48} />
             </div>
           )}
           
-          {!error && !loadingMoments && (
+          {!error && realDuration && (
             <div className="mb-2 relative overflow-hidden">
               <h3 className="text-sm text-gray-300 mb-2 px-2">Video Moments</h3>
               <div className="flex justify-center gap-1">
-                {videoMomentThumbnails.map((thumbUrl, index) => (
-                  <div 
-                    key={index}
-                    className="flex-1 cursor-pointer relative group max-w-[130px]"
-                    onClick={() => seekToPosition([0.1, 0.3, 0.5, 0.7, 0.9][index])}
-                  >
-                    <img 
-                      src={thumbUrl} 
-                      alt={`Moment ${index + 1}`} 
-                      className="w-full h-16 object-cover rounded border border-gray-700 group-hover:border-primary-500 transition-all"
-                    />
-                    <span className="absolute bottom-1 right-1 text-white text-xs bg-black bg-opacity-70 px-1 rounded">
-                      {Math.floor(([0.1, 0.3, 0.5, 0.7, 0.9][index]) * 100)}%
-                    </span>
-                    <div className="absolute inset-0 bg-primary-500 opacity-0 group-hover:opacity-20 transition-opacity rounded"></div>
-                  </div>
-                ))}
+                {[0.1, 0.3, 0.5, 0.7, 0.9].map((fraction, index) => {
+                  const momentTime = Math.floor(realDuration * fraction);
+                  const formatTime = (sec: number) => {
+                    const h = Math.floor(sec / 3600);
+                    const m = Math.floor((sec % 3600) / 60);
+                    const s = Math.floor(sec % 60);
+                    return [h, m, s]
+                      .map((v, i) => (i === 0 && v === 0 ? null : v.toString().padStart(2, '0')))
+                      .filter(Boolean)
+                      .join(':');
+                  };
+                  return (
+                    <div
+                      key={index}
+                      className="flex-1 cursor-pointer relative group max-w-[130px] h-16 bg-gray-800 rounded border border-gray-700 group-hover:border-primary-500 transition-all flex items-center justify-center"
+                      onClick={() => seekToPosition(fraction)}
+                    >
+                      <span className="absolute bottom-1 right-1 text-white text-xs bg-black bg-opacity-70 px-1 rounded">
+                        {Math.floor(fraction * 100)}%
+                      </span>
+                      <span className="absolute bottom-1 left-1 text-white text-xs bg-black bg-opacity-70 px-1 rounded">
+                        {formatTime(momentTime)}
+                      </span>
+                      <div className="text-white text-lg font-bold select-none pointer-events-none">
+                        {formatTime(momentTime)}
+                      </div>
+                      <div className="absolute inset-0 bg-primary-500 opacity-0 group-hover:opacity-20 transition-opacity rounded"></div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -410,10 +330,11 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
                 playing={isPlaying}
                 volume={volume}
                 controls
-                light={posterUrl} 
+                light={`/api/videos/thumbnail/${encodeURIComponent(video.path)}`}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onError={handleVideoError}
+                onDuration={d => setRealDuration(d)}
                 config={{
                   file: {
                     attributes: {
@@ -489,40 +410,24 @@ export default function VideoPlayer({ video, onClose, allVideos, onSelectVideo }
                       onClick={() => onSelectVideo(otherVideo)}
                     >
                       <div className="relative aspect-video bg-gray-900">
-                        {!otherVideosThumbnails[otherVideo.id] && (
-                          <ThumbnailGenerator 
-                            video={otherVideo} 
-                            onThumbnailGenerated={(url) => handleOtherVideoThumbnailGenerated(otherVideo.id, url)}
-                            position={0.25}
-                            quality={0.6}
-                          />
-                        )}
-                      
-                        <img 
-                          src={otherVideosThumbnails[otherVideo.id] || 
-                            `data:image/svg+xml;charset=utf-8,${encodeURIComponent(generateVideoThumbnail(otherVideo))}`}
+                        <img
+                          src={`/api/videos/thumbnail/${encodeURIComponent(otherVideo.path)}`}
                           alt={otherVideo.title}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(generateVideoThumbnail(otherVideo))}`;
+                          }}
                         />
-                        
                         {otherVideoWatched && (
                           <div className="absolute top-2 right-2 bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center">
                             <FaCheck size={12} />
                           </div>
                         )}
-                        
                         {showSimilarVideos && otherVideo.tags && video.tags && (
                           <div className="absolute top-2 left-2 bg-primary-600 text-white px-1.5 py-0.5 rounded text-xs">
                             {otherVideo.tags.filter(tag => video.tags.includes(tag)).length} matching tags
                           </div>
                         )}
-                        
-                        {loadingOtherThumbnails[otherVideo.id] && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 z-5">
-                            <FaSpinner className="text-white animate-spin" size={24} />
-                          </div>
-                        )}
-                        
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="bg-blue-500/70 rounded-full p-2">
                             <FaPlay className="text-white" size={16} />

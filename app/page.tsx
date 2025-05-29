@@ -41,7 +41,6 @@ export default function Home() {
           
           try {
             const data = await loadFolder(currentPath);
-            // Используем приведение типа для данных
             setFolderContent(data as unknown as FolderContent);
           } catch (loadError) {
             console.error('Error in loadFolder:', loadError);
